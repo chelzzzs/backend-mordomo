@@ -1,10 +1,13 @@
-# financas/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework import permissions, viewsets
 from django.db.models import Sum, Q
-from django.utils import timezone  # <-- Adicionamos o relógio do Django
-from .models import Transacao, Categoria
+from django.utils import timezone
+from .models import Transacao, Categoria, Perfil, DespesaFixa
+from .serializers import PerfilSerializer, DespesaFixaSerializer
+
 
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -12,16 +15,17 @@ class DashboardView(APIView):
     def get(self, request):
         usuario = request.user
         
-        # 1. Totais para os Cards
+        # Calculo minhas receitas totais
         receitas = Transacao.objects.filter(usuario=usuario).filter(
             Q(tipo__icontains='receita') | Q(tipo__icontains='entrada')
         ).aggregate(Sum('valor'))['valor__sum'] or 0
         
+        # Calculo minhas despesas totais
         despesas = Transacao.objects.filter(usuario=usuario).filter(
             Q(tipo__icontains='despesa') | Q(tipo__icontains='saida') | Q(tipo__icontains='saída')
         ).aggregate(Sum('valor'))['valor__sum'] or 0
         
-        # 2. Dados para o Gráfico de Pizza (Gastos por Categoria)
+        # Agrupo meus gastos por categoria para o gráfico de pizza
         gastos_por_categoria = Transacao.objects.filter(
             usuario=usuario
         ).filter(
@@ -35,7 +39,7 @@ class DashboardView(APIView):
                 'value': float(item['total'])
             })
 
-        # 3. Histórico do Gráfico de Linha e Últimas Transações
+        # Monto a linha do tempo do meu saldo
         transacoes_cronologicas = Transacao.objects.filter(usuario=usuario).order_by('data', 'id')
         saldo_corrente = 0
         grafico_dados = []
@@ -48,10 +52,10 @@ class DashboardView(APIView):
             else:
                 grafico_dados.append({'dia': dia, 'saldo': saldo_corrente})
 
+        # Pego minhas últimas 5 transações
         ultimas = Transacao.objects.filter(usuario=usuario).order_by('-data', '-id')[:5]
         lista_ultimas = [{'descricao': u.descricao, 'valor': float(u.valor), 'is_receita': any(x in u.tipo.lower() for x in ['receita', 'entrada']), 'data': u.data.strftime('%d/%m')} for u in ultimas]
 
-        # 4. Lista de Categorias GLOBAIS para o Formulário Manual
         categorias = Categoria.objects.all().values('id', 'nome')
 
         return Response({
@@ -65,20 +69,51 @@ class DashboardView(APIView):
         })
 
     def post(self, request):
-        # Rota para salvar a entrada manual
         usuario = request.user
         dados = request.data
         
-        # Pega a categoria correta, seja sua ou global
+        # Busco a categoria que selecionei
         categoria = Categoria.objects.get(id=dados['categoria_id'])
         
-        # Cria a transação avisando o banco que a data é "agora"
+        # Salvo minha nova transação manual
         Transacao.objects.create(
             usuario=usuario,
             descricao=dados['descricao'],
             valor=dados['valor'],
             tipo=dados['tipo'],
             categoria=categoria,
-            data=timezone.now() # <-- CORREÇÃO: Enviando a data atual!
+            data=timezone.now() 
         )
         return Response({'status': 'sucesso'})
+    
+
+# Defino a rota para ler e atualizar minha renda
+@api_view(['GET', 'PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def perfil_usuario(request):
+    # Busco ou crio meu perfil zerado se for meu primeiro acesso
+    perfil, created = Perfil.objects.get_or_create(usuario=request.user)
+
+    if request.method == 'GET':
+        serializer = PerfilSerializer(perfil)
+        return Response(serializer.data)
+    
+    elif request.method == 'PUT': 
+        serializer = PerfilSerializer(perfil, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+# Defino o CRUD das minhas contas
+class DespesaFixaViewSet(viewsets.ModelViewSet):
+    serializer_class = DespesaFixaSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Filtro para ver apenas as minhas contas
+        return DespesaFixa.objects.filter(usuario=self.request.user)
+
+    def perform_create(self, serializer):
+        # marco a nova despesa com o meu usuário logado
+        serializer.save(usuario=self.request.user)

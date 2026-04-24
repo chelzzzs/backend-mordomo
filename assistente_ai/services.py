@@ -5,7 +5,6 @@ from datetime import date
 from google import genai
 from google.genai import types
 
-# IMPORTANTE: Importando os modelos do seu banco de dados
 from financas.models import Categoria, Transacao 
 
 MODELO_IA = "gemini-2.5-flash"
@@ -68,19 +67,19 @@ def processar_mensagem_usuario(cliente_ia: genai.Client, mensagem_usuario: str, 
 
         # Verifica se a IA identificou dados para salvar no banco
         transacao_info = dados_extraidos.get("dados_transacao")
-        dados_extraidos["transacao_salva"] = False # Flag para o front-end saber o que houve
+        dados_extraidos["transacao_salva"] = False 
 
         if transacao_info and transacao_info.get("valor"):
             try:
-                # 1. Busca a Categoria sugerida pela IA (AGORA VINCULADA AO DONO)
+                # Busca a Categoria sugerida pela IA 
                 categoria_obj, created = Categoria.objects.get_or_create(
-                    usuario=usuario_logado, # <--- Vinculando a Categoria ao dono
+                    usuario=usuario_logado, #Vinculando a Categoria ao dono
                     nome=transacao_info["categoria"].capitalize()
                 )
 
-                # 2. Salva a transação oficial no banco de dados (NO LUGAR CERTO)
+                # Salva a transação oficial no banco de dados
                 Transacao.objects.create(
-                    usuario=usuario_logado, # <--- Vinculando a Transação ao dono
+                    usuario=usuario_logado, 
                     descricao=transacao_info["descricao"],
                     valor=float(transacao_info["valor"]),
                     data=date.today(),
@@ -88,7 +87,7 @@ def processar_mensagem_usuario(cliente_ia: genai.Client, mensagem_usuario: str, 
                     categoria=categoria_obj
                 )
                 
-                # Avisa o React que o banco foi alterado
+               
                 dados_extraidos["transacao_salva"] = True 
                 dados_extraidos["acao_frontend"] = "atualizar_extrato"
                 
