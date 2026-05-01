@@ -22,7 +22,7 @@ class ChatMordomoView(APIView):
                 "intencao": "erro_tecnico"
             }, status=500)
 
-        # Inicializa o cliente da IA
+        
         cliente_ia = genai.Client(api_key=chave_api)
         
         #  Chama o serviço passando o cliente e o usuário autenticado
