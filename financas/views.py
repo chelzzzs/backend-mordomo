@@ -74,7 +74,7 @@ class DashboardView(APIView):
         ultimas = Transacao.objects.filter(usuario=usuario).order_by('-data', '-id')[:5]
         lista_ultimas = [{'descricao': u.descricao, 'valor': float(u.valor), 'is_receita': any(x in u.tipo.lower() for x in ['receita', 'entrada']), 'data': u.data.strftime('%d/%m')} for u in ultimas]
 
-        categorias = Categoria.objects.all().values('id', 'nome')
+        categorias = Categoria.objects.filter(usuario=usuario).values('id', 'nome')
 
         return Response({
             'saldo_atual': saldo_real,
@@ -89,10 +89,22 @@ class DashboardView(APIView):
     def post(self, request):
         usuario = request.user
         dados = request.data
-        
-        # Busco a categoria que selecionei
-        categoria = Categoria.objects.get(id=dados['categoria_id'])
-        
+
+        # Confiro se o front mandou tudo que preciso
+        obrigatorios = ('descricao', 'valor', 'categoria_id', 'tipo')
+        faltando = [c for c in obrigatorios if dados.get(c) in (None, '')]
+        if faltando:
+            return Response(
+                {'erro': f'campos obrigatórios ausentes: {", ".join(faltando)}'},
+                status=400,
+            )
+
+        # Busco a categoria SÓ entre as minhas — evita IDOR
+        try:
+            categoria = Categoria.objects.get(id=dados['categoria_id'], usuario=usuario)
+        except Categoria.DoesNotExist:
+            return Response({'erro': 'categoria inválida'}, status=404)
+
         # Salvo minha nova transação manual
         Transacao.objects.create(
             usuario=usuario,
@@ -100,7 +112,7 @@ class DashboardView(APIView):
             valor=dados['valor'],
             tipo=dados['tipo'],
             categoria=categoria,
-            data=timezone.now() 
+            data=timezone.now()
         )
         return Response({'status': 'sucesso'})
     

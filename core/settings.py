@@ -1,21 +1,17 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv # <--- ADICIONAR
+from dotenv import load_dotenv
 
-
-load_dotenv() 
-
-BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Leio segredos do .env — nunca commitar valores reais aqui.
+SECRET_KEY = os.environ['SECRET_KEY']
 
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-SECRET_KEY = 'django-insecure-!#-d#0k$00ahl2!fn*i4g@q7yrr85wk1wbg&b2xara1krdc=a@'
-
-DEBUG = True
-
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 
 
@@ -110,13 +106,6 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-# Permite que qualquer front-end local consuma a sua API
-CORS_ALLOW_ALL_ORIGINS = True 
-
-# Dica de segurança: Quando for fazer o deploy do projeto em produção, 
-# você troca isso por CORS_ALLOWED_ORIGINS = ['https://seudominio-react.com']
-
-
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -126,6 +115,7 @@ REST_FRAMEWORK = {
     ),
 }
 
+# Whitelist do CORS — em produção, trocar pelos hosts reais (ex.: https://seudominio.com)
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
